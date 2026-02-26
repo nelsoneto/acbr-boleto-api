@@ -1,84 +1,89 @@
+// src/server.ts
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fs from 'fs';
 import path from 'path';
 import { ACBrBoleto } from './lib/ACBrBoleto.js';
 import { ACBrParser, BoletoSchema } from './lib/ACBrParser.js';
-import z from 'zod';
+import { z } from 'zod';
 
-
-const server = Fastify({ logger: true });
-
+type BoletoInput = z.infer<typeof BoletoSchema>;
+const server = Fastify();
 server.register(cors, { origin: '*' });
 
-// Criar pasta temp se não existir
-if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
+const TEMP_DIR = '/app/temp';
 
 server.post('/api/gerar-boleto', async (request, reply) => {
-  // Instanciar fora para garantir acesso no finally
-  const acbr = new ACBrBoleto();
+    const acbr = new ACBrBoleto();
+    const body = request.body as BoletoInput;
+    const numeroDoc = body.NumeroDocumento || Date.now().toString();
+    const nomeArquivoPDF = `boleto_${numeroDoc}.pdf`;
 
-  try {
-    // Validar antes de qualquer lógica pesada
-    // parse() lança ZodError automaticamente, caindo no seu catch (err instanceof z.ZodError)
-    const dadosValidados = BoletoSchema.parse(request.body);
+    const iniConfigPath = path.join(TEMP_DIR, `cfg_${numeroDoc}.ini`);
+    const iniTituloPath = path.join(TEMP_DIR, `tit_${numeroDoc}.ini`);
 
-    // Inicializar a Lib
-    acbr.inicializar(path.resolve('acbrlib.ini'), '');
+    try {
+        const dados = BoletoSchema.parse(body);
 
-    // Usar o Parser (agora com garantia de tipos)
-    const tituloIni = ACBrParser.dadosParaIni(dadosValidados);
+        // Configuração mínima
+        const configBase = `[Principal]\r\nTipoResposta=0\r\nCodificacao=0\r\n[BoletoDiretorioConfig]\r\nPathPDF=${TEMP_DIR}/\r\nNomeArquivo=${nomeArquivoPDF}\r\n`;
+        fs.writeFileSync(iniConfigPath, configBase, 'latin1');
 
-    acbr.limparLista();
-    acbr.incluirTitulos(tituloIni, 'I');
+        const resInit = acbr.inicializar(iniConfigPath, '');
+        if (resInit !== 0) throw new Error(`Erro Inicializar: ${resInit}`);
 
-    // Configurações e Geração
-    acbr.configGravarValor("Principal", "LogPath", path.resolve('logs'));
-    acbr.configGravarValor("BoletoCedenteConfig", "Nome", "Minha Empresa Mock");
-    acbr.configGravarValor("BoletoBancoConfig", "TipoCobranca", "cobItau");
-    
-    // Configura onde o PDF será salvo
-    const tempDir = path.resolve('./temp');
-    acbr.configGravarValor("BoletoDiretorioConfig", "PathPDF", tempDir);
-    acbr.configGravarValor("BoletoDiretorioConfig", "DirLogo", "");
-    
-    acbr.gerarPDF();
+        // Configurações do Cedente (empresa emissora)
+        acbr.configGravarValor("BoletoBancoConfig", "TipoCobranca", "cobBradesco");
+        acbr.configGravarValor("BoletoCedenteConfig", "Nome", "SUA EMPRESA LTDA");
+        acbr.configGravarValor("BoletoCedenteConfig", "CNPJCPF", "12345678000195"); // CNPJ válido
+        acbr.configGravarValor("BoletoCedenteConfig", "Agencia", "1234");
+        acbr.configGravarValor("BoletoCedenteConfig", "Conta", "56789");
+        acbr.configGravarValor("BoletoCedenteConfig", "ContaDigito", "0");
 
-    // Localizar o arquivo gerado
-    // Nota: A ACBrLib costuma nomear o arquivo baseado no NumeroDocumento ou um padrão interno
-    const pdfPath = path.join(tempDir, `boleto_${dadosValidados.NumeroDocumento}.pdf`);
-    
-    // Pequena espera ou verificação se o arquivo existe (DLLs as vezes são assíncronas no I/O)
-    if (!fs.existsSync(pdfPath)) {
-        throw new Error("Falha ao localizar o PDF gerado pela DLL.");
+        // Campos adicionais obrigatórios
+        acbr.configGravarValor("BoletoCedenteConfig", "Convenio", "1234567");
+        acbr.configGravarValor("BoletoCedenteConfig", "CodigoTransmissao", "123456");
+        acbr.configGravarValor("BoletoCedenteConfig", "CodigoCedente", "123456");
+        acbr.configGravarValor("BoletoCedenteConfig", "Modalidade", "1");
+        acbr.configGravarValor("BoletoCedenteConfig", "TipoCarteira", "1");
+        acbr.configGravarValor("BoletoCedenteConfig", "TipoDocumento", "1");
+        acbr.configGravarValor("BoletoCedenteConfig", "ResponEmissao", "1");
+
+        // Gerar título
+        let tituloConteudo = ACBrParser.dadosParaIni(dados);
+        tituloConteudo = tituloConteudo.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        fs.writeFileSync(iniTituloPath, tituloConteudo, 'latin1');
+
+        console.log('📄 Conteúdo do título INI:\n', tituloConteudo);
+
+        await new Promise(r => setTimeout(r, 100));
+
+        acbr.limparLista();
+        const resInc = acbr.incluirTitulos(iniTituloPath);
+        console.log(`📝 Incluir: ${resInc} | Arquivo: ${iniTituloPath}`);
+
+        if (resInc !== 0) throw new Error(`Erro Incluir: ${resInc}`);
+
+        if (acbr.gerarPDF() !== 0) throw new Error("Erro PDF");
+
+        await new Promise(r => setTimeout(r, 500));
+        const pdfPath = path.join(TEMP_DIR, nomeArquivoPDF);
+
+        if (!fs.existsSync(pdfPath)) throw new Error("PDF sumiu!");
+
+        const pdfBuffer = fs.readFileSync(pdfPath);
+
+        // Limpeza
+        [iniConfigPath, iniTituloPath, pdfPath].forEach(f => { if(fs.existsSync(f)) fs.unlinkSync(f); });
+
+        return reply.type('application/pdf').send(pdfBuffer);
+
+    } catch (err: any) {
+        console.error('❌', err.message);
+        return reply.status(500).send({ error: err.message });
+    } finally {
+        acbr.finalizar();
     }
-
-    const buffer = fs.readFileSync(pdfPath);
-
-    // Retorno
-    return reply
-      .type('application/pdf')
-      .send(buffer);
-
-  } catch (err: any) {
-    if (err instanceof z.ZodError) {
-      return reply.status(400).send({ 
-        error: "Dados inválidos", 
-        details: err.flatten().fieldErrors 
-      });
-    }
-    server.log.error(err);
-    return reply.status(500).send({ error: err.message });
-  } finally {
-    // SEMPRE finalizar para liberar memória RAM e arquivos
-    try { acbr.finalizar(); } catch (e) { /* ignore */ }
-  }
 });
 
-server.listen({ port: 3001, host: '0.0.0.0' }, (err) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-  console.log('🚀 API ACBr Boleto rodando em http://localhost:3001');
-});
+server.listen({ port: 3001, host: '0.0.0.0' }).then(() => console.log('🚀 Online'));
