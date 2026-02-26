@@ -24,22 +24,35 @@ export class ACBrParser {
     const linhas = [
       `[Titulo1]`,
       `NumeroDocumento=${dados.NumeroDocumento}`,
-      `NossoNumero=${dados.NumeroDocumento.padStart(8, '0')}`, // formatado corretamente
-      `Carteira=09`, // exemplo de carteira para Itaú
-      `EspecieDoc=DM`, // duplicata mercantil
+      `NossoNumero=${dados.NumeroDocumento.padStart(8, '0')}`,
+      `Carteira=1`,
+      `EspecieDoc=DM`,
+      `TipoDocumento=DM`,
+      `TipoInscricaoCedente=2`,
+      `TipoInscricaoSacado=1`,
+      `DataCreditoLanc=30/12/1899`,
+      `NumeroArquivo=1`,
+      `Especie=R$`,
+      `PercentualMulta=2`,
+      `PercentualJurosDia=0.033`,
       `DataDocumento=${dataHoje}`,
       `DataProcessamento=${dataHoje}`,
       `Vencimento=${dados.Vencimento}`,
       `Valor=${dados.Valor.toFixed(2).replace('.', ',')}`,
       `Sacado.Nome=${dados.Sacado_Nome}`,
       `Sacado.CNPJCPF=${dados.Sacado_CNPJCPF}`,
+      `Sacado.TipoInscricao=1`, // 1 = CPF
       `Sacado.Logradouro=${dados.Sacado_Logradouro}`,
       `Sacado.Numero=${dados.Sacado_Numero}`,
       `Sacado.Bairro=${dados.Sacado_Bairro}`,
       `Sacado.Cidade=${dados.Sacado_Cidade}`,
       `Sacado.UF=${dados.Sacado_UF}`,
       `Sacado.CEP=${dados.Sacado_CEP}`,
-      `Mensagem=${dados.Mensagem || ''}`
+      `LocalPagamento=Pagável em qualquer banco até o vencimento`,
+      `Instrucao1=${dados.Mensagem || ''}`,
+      `Instrucao2=`,
+      `Aceite=N`,
+      `Moeda=9`
     ];
     return linhas.join('\r\n');
   }

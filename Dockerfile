@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Instalando TODAS as dependências que a ACBrLib precisa no Linux
+# Instala TODAS as dependências que a ACBrLib LINUX
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     libxml2 \
@@ -32,4 +32,4 @@ EXPOSE 3001
 ENV DISPLAY=:1
 
 # Inicia o Xvfb, espera 2 segundos para ele ligar, e roda o servidor
-CMD rm -f /tmp/.X99-lock && Xvfb :1 -screen 0 1024x768x16 & sleep 2 && npm run dev
+CMD ["/bin/sh", "-c", "rm -f /tmp/.X1-lock && Xvfb :1 -screen 0 1024x768x16 & exec npm run dev"]

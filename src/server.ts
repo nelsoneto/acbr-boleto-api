@@ -25,15 +25,22 @@ server.post('/api/gerar-boleto', async (request, reply) => {
     try {
         const dados = BoletoSchema.parse(body);
 
-        // Configuração mínima
-        const configBase = `[Principal]\r\nTipoResposta=0\r\nCodificacao=0\r\n[BoletoDiretorioConfig]\r\nPathPDF=${TEMP_DIR}/\r\nNomeArquivo=${nomeArquivoPDF}\r\n`;
+        // Configuração base, agora incluindo as seções que a ACBrLib espera encontrar na inicialização.
+        const configBase = [
+            '[Principal]',
+            'TipoResposta=0',
+            'Codificacao=0',
+            '[BoletoBancoConfig]',
+            '[BoletoCedenteConfig]',
+            `[BoletoDiretorioConfig]\r\nPathPDF=${TEMP_DIR}/\r\nNomeArquivo=${nomeArquivoPDF}\r\n`
+        ].join('\r\n');
         fs.writeFileSync(iniConfigPath, configBase, 'latin1');
 
         const resInit = acbr.inicializar(iniConfigPath, '');
         if (resInit !== 0) throw new Error(`Erro Inicializar: ${resInit}`);
 
-        // Configurações do Cedente (empresa emissora)
-        acbr.configGravarValor("BoletoBancoConfig", "TipoCobranca", "cobBradesco");
+        // Configurações do Cedente 
+        acbr.configGravarValor("BoletoBancoConfig", "TipoCobranca", "cobBancoTeste");
         acbr.configGravarValor("BoletoCedenteConfig", "Nome", "SUA EMPRESA LTDA");
         acbr.configGravarValor("BoletoCedenteConfig", "CNPJCPF", "12345678000195"); // CNPJ válido
         acbr.configGravarValor("BoletoCedenteConfig", "Agencia", "1234");
@@ -56,20 +63,31 @@ server.post('/api/gerar-boleto', async (request, reply) => {
 
         console.log('📄 Conteúdo do título INI:\n', tituloConteudo);
 
-        await new Promise(r => setTimeout(r, 100));
-
         acbr.limparLista();
         const resInc = acbr.incluirTitulos(iniTituloPath);
         console.log(`📝 Incluir: ${resInc} | Arquivo: ${iniTituloPath}`);
 
         if (resInc !== 0) throw new Error(`Erro Incluir: ${resInc}`);
 
-        if (acbr.gerarPDF() !== 0) throw new Error("Erro PDF");
+        if (acbr.gerarPDF() !== 0) throw new Error("Erro ao chamar GerarPDF. Verifique os logs da ACBr.");
 
-        await new Promise(r => setTimeout(r, 500));
         const pdfPath = path.join(TEMP_DIR, nomeArquivoPDF);
 
-        if (!fs.existsSync(pdfPath)) throw new Error("PDF sumiu!");
+        // Função robusta para aguardar a criação do arquivo pela lib nativa
+        const waitForFile = async (filePath: string, timeoutMs = 3000) => {
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+                if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+                    return true;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100)); // Tenta a cada 100ms
+            }
+            return false;
+        }
+
+        if (!await waitForFile(pdfPath)) {
+            throw new Error(`Timeout: O arquivo PDF não foi encontrado ou está vazio após 3 segundos. Verifique os logs da ACBr na pasta /logs.`);
+        }
 
         const pdfBuffer = fs.readFileSync(pdfPath);
 
