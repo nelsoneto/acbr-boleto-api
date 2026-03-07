@@ -8,16 +8,14 @@ const binPath = path.join(__dirname_root, 'bin');
 // Isso garante que o Windows encontre as dependências que já estão lá dentro
 process.env.PATH = binPath + ';' + process.env.PATH;
 
-import { ACBrBoleto } from './lib/ACBrBoleto.js';
+import  ACBrBoleto  from './lib/ACBrBoleto.js';
 
-const acbr = new ACBrBoleto();
+// O construtor já chama inicializar() internamente via getInstance()
+const acbr = ACBrBoleto.getInstance();
 
 try {
     console.log('Diretório de dependências configurado:', binPath);
     console.log('--- Iniciando Teste ACBrLib ---');
-    
-    // Inicialização
-    acbr.inicializar(path.resolve('acbrlib.ini'), "");
     console.log('✅ DLL Inicializada com sucesso!');
 
     // evitar vazamentos de memória ou travamento do arquivo de log

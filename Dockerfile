@@ -31,5 +31,5 @@ EXPOSE 3001
 # Garante que o Node procure o monitor virtual na porta :1
 ENV DISPLAY=:1
 
-# Inicia o Xvfb, espera 2 segundos para ele ligar, e roda o servidor
-CMD ["/bin/sh", "-c", "rm -f /tmp/.X1-lock && Xvfb :1 -screen 0 1024x768x16 & exec npm run dev"]
+# Inicia o Xvfb e sobe o servidor em modo produção
+CMD ["/bin/sh", "-c", "rm -f /tmp/.X1-lock && Xvfb :1 -screen 0 1024x768x16 & sleep 1 && exec npm start"]

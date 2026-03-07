@@ -10,5 +10,6 @@ services:
       - ./temp:/app/temp
       - ./logs:/app/logs
     environment:
-      - DISPLAY=:1 # Garante que o Xvfb use o display correto
+      - DISPLAY=:1 # Garante que o Xvfb use o display 
+      - TZ=America/Porto_Velho
     restart: unless-stopped
