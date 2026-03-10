@@ -19,6 +19,8 @@ class ACBrBoleto {
   private Boleto_GerarPDF: any;
   private Boleto_LimparLista: any;
   private Boleto_UltimoRetorno: any;
+  private outputDir: string;
+  private outputFilePath: string;
 
   private constructor() {
 
@@ -30,15 +32,18 @@ class ACBrBoleto {
       : 'libacbrboleto64.so';
 
     const libPath = path.resolve(__dirname, '../../bin', libName);
+    this.outputDir = path.resolve(__dirname, '../../temp/pdf');
+    this.outputFilePath = path.join(this.outputDir, 'boleto.pdf');
 
     console.log('📦 Carregando ACBrLib:', libPath);
 
     this.lib = koffi.load(libPath);
 
     /**
-     * No Linux 64-bit, o handle da ACBrLib é PtrInt (8 bytes = ponteiro).
-     * void * é o tipo correto — platform-sized e opaco.
-     * koffi.out(koffi.pointer('void *')) garante a leitura do valor de saída.
+     * O handle da ACBrLib é um ponteiro opaco (TObject do Pascal).
+     * koffi.out(koffi.pointer('void *')) devolve um External opaco
+     * que é passado de volta intacto para todas as funções da DLL.
+     * int/int64 causam segfault porque a DLL dereferencia o handle como ponteiro.
      */
     this.Boleto_Inicializar = this.lib.func(
       convention,
@@ -58,7 +63,7 @@ class ACBrBoleto {
       convention,
       'Boleto_IncluirTitulos',
       'int',
-      ['void *', 'string', 'string']
+      ['void *', 'string', 'void *', 'int']
     );
 
     this.Boleto_GerarPDF = this.lib.func(
@@ -79,7 +84,7 @@ class ACBrBoleto {
       convention,
       'Boleto_UltimoRetorno',
       'int',
-      ['void *', 'string', 'int']
+      ['void *', 'void *', 'int']
     );
 
     this.inicializar();
@@ -108,6 +113,8 @@ class ACBrBoleto {
 
     const configPath = path.join(configDir, 'acbr-config.ini');
 
+    if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
+
     const cedenteDoc = (process.env.CEDENTE_CNPJCPF ?? '').replace(/\D/g, '');
     const tipoCedente = cedenteDoc.length === 14 ? 2 : 1;
 
@@ -115,11 +122,10 @@ class ACBrBoleto {
       `[ACBrBoleto]`,
       `TipoCobranca=${process.env.TIPO_COBRANCA ?? 'cobBancoTeste'}`,
       ``,
-      `[Cedente]`,
+      `[BoletoCedenteConfig]`,
       `Nome=${process.env.CEDENTE_NOME ?? ''}`,
       `CNPJCPF=${cedenteDoc}`,
       `TipoInscricao=${tipoCedente}`,
-      `Banco=${process.env.CEDENTE_BANCO ?? ''}`,
       `Agencia=${process.env.CEDENTE_AGENCIA ?? ''}`,
       `AgenciaDigito=${process.env.CEDENTE_AGENCIA_DIGITO ?? '0'}`,
       `Conta=${process.env.CEDENTE_CONTA ?? ''}`,
@@ -132,6 +138,16 @@ class ACBrBoleto {
       `TipoCarteira=${process.env.CEDENTE_TIPO_CARTEIRA ?? '1'}`,
       `TipoDocumento=${process.env.CEDENTE_TIPO_DOCUMENTO ?? 'DM'}`,
       `ResponEmissao=${process.env.CEDENTE_RESPON_EMISSAO ?? '1'}`,
+      ``,
+      `[BoletoBancoConfig]`,
+      `Numero=${process.env.CEDENTE_BANCO ?? ''}`,
+      ``,
+      `[BoletoDiretorioConfig]`,
+      `DirArqRemessa=${configDir}`,
+      `DirArqRetorno=${configDir}`,
+      ``,
+      `[BoletoBancoFCFortesConfig]`,
+      `NomeArquivo=${this.outputFilePath}`,
     ].join('\r\n');
 
     fs.writeFileSync(configPath, configIni, 'utf8');
@@ -165,19 +181,20 @@ class ACBrBoleto {
 
   limparLista() {
     const ret = this.Boleto_LimparLista(this.handle);
-    console.log('🔧 limparLista ret:', ret, '| DLL:', this.ultimoRetorno());
+    console.log('🔧 limparLista ret:', ret);
     return ret;
   }
 
-  incluirTitulos(iniPath: string) {
-    const ret = this.Boleto_IncluirTitulos(this.handle, iniPath, 'I');
-    console.log('🔧 incluirTitulos ret:', ret, '| DLL:', this.ultimoRetorno());
+  incluirTitulos(iniContent: string) {
+    const retorno = Buffer.alloc(4096);
+    const ret = this.Boleto_IncluirTitulos(this.handle, iniContent, retorno, retorno.length);
+    console.log('🔧 incluirTitulos ret:', ret);
     return ret;
   }
 
   gerarPDF() {
     const ret = this.Boleto_GerarPDF(this.handle);
-    console.log('🔧 gerarPDF ret:', ret, '| DLL:', this.ultimoRetorno());
+    console.log('🔧 gerarPDF ret:', ret);
     return ret;
   }
 
@@ -199,6 +216,14 @@ class ACBrBoleto {
       this.Boleto_Finalizar(this.handle);
       this.handle = null;
     }
+  }
+
+  getConfiguredPdfPath() {
+    return this.outputFilePath;
+  }
+
+  getOutputDir() {
+    return this.outputDir;
   }
 }
 

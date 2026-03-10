@@ -75,6 +75,7 @@ type BoletoRequest = z.infer<typeof RequestSchema>;
 // ==============================
 server.post('/api/gerar-boleto', async (request, reply) => {
   let iniPath: string | null = null;
+  let pdfFinalPath: string | null = null;
 
   try {
     // ==========================
@@ -123,17 +124,33 @@ server.post('/api/gerar-boleto', async (request, reply) => {
     ret = acbr.limparLista();
     if (ret !== 0) throw new Error(`limparLista falhou: ret=${ret}`);
 
-    ret = acbr.incluirTitulos(iniPath);
-    if (ret !== 0) throw new Error(`incluirTitulos falhou: ret=${ret} — ${acbr.ultimoRetorno()}`);
+    ret = acbr.incluirTitulos(iniContent);
+    if (ret !== 0) throw new Error(`incluirTitulos falhou: ret=${ret}`);
 
     ret = acbr.gerarPDF();
-    if (ret !== 0) throw new Error(`gerarPDF falhou: ret=${ret} — ${acbr.ultimoRetorno()}`);
+    if (ret !== 0) throw new Error(`gerarPDF falhou: ret=${ret}`);
 
-    console.log('✅ PDF gerado');
+    const pdfBasePath = acbr.getConfiguredPdfPath();
+    const pdfDir = acbr.getOutputDir();
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const pdfNome = `${nomeArquivo}.pdf`;
+    pdfFinalPath = path.join(pdfDir, pdfNome);
+
+    if (!fs.existsSync(pdfBasePath)) {
+      throw new Error(`PDF não encontrado no caminho configurado: ${pdfBasePath}`);
+    }
+
+    fs.copyFileSync(pdfBasePath, pdfFinalPath);
+
+    console.log('✅ PDF gerado com sucesso! Gloria a DEUS 🙌');
 
     return reply.send({
       sucesso: true,
       mensagem: 'Boleto gerado com sucesso',
+      pdfPath: pdfFinalPath,
     });
 
   } catch (err: any) {

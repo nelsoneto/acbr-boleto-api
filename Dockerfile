@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-slim
 
 # Instala TODAS as dependências que a ACBrLib LINUX
 RUN apt-get update && apt-get install -y \

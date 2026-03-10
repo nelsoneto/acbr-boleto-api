@@ -36,7 +36,8 @@ export class ACBrParser {
     const linhas = [
       `[Titulo1]`,
       `NumeroDocumento=${dados.NumeroDocumento}`,
-      `NossoNumero=${dados.NumeroDocumento.padStart(8, '0')}`,
+      `NossoNumero=${dados.NumeroDocumento.replace(/\D/g, '').padStart(8, '0')}`,
+      `NossoNumeroFormatado=${dados.NumeroDocumento.replace(/\D/g, '').padStart(8, '0')}`,
       `Carteira=${process.env.CEDENTE_CARTEIRA ?? '1'}`,
       `EspecieDoc=DM`,
       `TipoDocumento=DM`,
