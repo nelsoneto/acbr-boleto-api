@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libice6 \
     libglib2.0-0 \
     xvfb \
+    x11-utils \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,6 +31,7 @@ EXPOSE 3001
 
 # Garante que o Node procure o monitor virtual na porta :1
 ENV DISPLAY=:1
+ENV LD_LIBRARY_PATH=/app/bin:/app/bin/dep:/usr/lib/x86_64-linux-gnu
 
-# Inicia o Xvfb e sobe o servidor em modo produção
-CMD ["/bin/sh", "-c", "rm -f /tmp/.X1-lock && Xvfb :1 -screen 0 1024x768x16 & sleep 1 && exec npm start"]
+# Inicia o Xvfb e só sobe o servidor quando o display estiver realmente acessível
+CMD ["/bin/sh", "-c", "rm -f /tmp/.X1-lock; Xvfb :1 -screen 0 1024x768x16 & i=0; while ! xdpyinfo -display :1 >/dev/null 2>&1 && [ \"$i\" -lt 60 ]; do i=$((i+1)); sleep 0.25; done; if ! xdpyinfo -display :1 >/dev/null 2>&1; then echo 'Xvfb nao ficou pronto a tempo'; exit 1; fi; tries=0; max=5; while [ \"$tries\" -lt \"$max\" ]; do npm start; code=$?; if [ \"$code\" -ne 139 ]; then exit \"$code\"; fi; tries=$((tries+1)); echo 'ACBr segfault 139 no boot, tentando novamente...'; sleep 2; done; exit 139"]

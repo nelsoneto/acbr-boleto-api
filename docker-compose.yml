@@ -1,4 +1,4 @@
-version: "3.8"
+# version: "3.8"
 
 services:
   acbr-api:
@@ -12,4 +12,4 @@ services:
     environment:
       - DISPLAY=:1 # Garante que o Xvfb use o display 
       - TZ=America/Porto_Velho
-    restart: unless-stopped
+    restart: "no"

@@ -112,6 +112,43 @@ class ACBrBoleto {
     if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
 
     const configPath = path.join(configDir, 'acbr-config.ini');
+    // Permite sobrescrever via .env e mantém fallback para o projeto local/container.
+    const logoDir = process.env.DIR_LOGO ?? path.resolve(__dirname, '../../assets/logos');
+    const bancoNumero = (process.env.CEDENTE_BANCO ?? '').replace(/\D/g, '').padStart(3, '0');
+    const logoEnv = (process.env.LOGO_BANCO ?? '').trim();
+    const layoutBoleto = process.env.BOLETO_LAYOUT ?? '1';
+
+    let logoBancoPath = '';
+    if (logoEnv) {
+      logoBancoPath = path.isAbsolute(logoEnv)
+        ? logoEnv
+        : path.resolve(__dirname, '../../', logoEnv);
+    } else {
+      const logoBmp = path.join(logoDir, `${bancoNumero}.bmp`);
+      const logoPng = path.join(logoDir, `${bancoNumero}.png`);
+      if (fs.existsSync(logoBmp)) logoBancoPath = logoBmp;
+      else if (fs.existsSync(logoPng)) logoBancoPath = logoPng;
+    }
+
+    // Aliases para aumentar compatibilidade.
+    if (logoBancoPath && fs.existsSync(logoBancoPath)) {
+      const aliasNames = [
+        `${bancoNumero}.bmp`,
+        `${bancoNumero}-0.bmp`,
+        `${bancoNumero}_0.bmp`,
+        'Banco.bmp',
+        'banco.bmp',
+      ];
+      for (const aliasName of aliasNames) {
+        const aliasPath = path.join(logoDir, aliasName);
+        if (!fs.existsSync(aliasPath)) {
+          fs.copyFileSync(logoBancoPath, aliasPath);
+        }
+      }
+      console.log('🏦 Logo banco selecionada:', logoBancoPath);
+    } else {
+      console.log('⚠️ Logo do banco não encontrada para', bancoNumero, 'em', logoDir);
+    }
 
     if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
 
@@ -147,6 +184,9 @@ class ACBrBoleto {
       `DirArqRetorno=${configDir}`,
       ``,
       `[BoletoBancoFCFortesConfig]`,
+      `DirLogo=${logoDir}`,
+      `LogoMarca=${logoBancoPath}`,
+      `Layout=${layoutBoleto}`,
       `NomeArquivo=${this.outputFilePath}`,
     ].join('\r\n');
 

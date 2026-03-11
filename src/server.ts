@@ -145,7 +145,7 @@ server.post('/api/gerar-boleto', async (request, reply) => {
 
     fs.copyFileSync(pdfBasePath, pdfFinalPath);
 
-    console.log('✅ PDF gerado com sucesso! Gloria a DEUS 🙌');
+    console.log('✅ PDF gerado com sucesso!');
 
     return reply.send({
       sucesso: true,

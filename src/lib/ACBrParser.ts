@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 export const BoletoSchema = z.object({
-  NumeroDocumento: z.string().min(1),
+  NumeroDocumento: z.string().regex(/^\d+$/, 'NumeroDocumento deve conter apenas números'),
   Vencimento: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Formato esperado: DD/MM/YYYY'),
   Valor: z.number().positive(),
   Sacado_Nome: z.string().min(5).max(60),
@@ -32,13 +32,19 @@ export class ACBrParser {
 
     const cedenteDoc = (process.env.CEDENTE_CNPJCPF ?? '').replace(/\D/g, '');
     const tipoCedente = cedenteDoc.length === 14 ? 2 : 1;
+    const valorFmt = dados.Valor.toFixed(2).replace('.', ',');
+    const numeroDoc = dados.NumeroDocumento.replace(/\D/g, '');
+    const nossoNumero = numeroDoc.padStart(8, '0');
 
     const linhas = [
       `[Titulo1]`,
-      `NumeroDocumento=${dados.NumeroDocumento}`,
-      `NossoNumero=${dados.NumeroDocumento.replace(/\D/g, '').padStart(8, '0')}`,
-      `NossoNumeroFormatado=${dados.NumeroDocumento.replace(/\D/g, '').padStart(8, '0')}`,
+      `NumeroDocumento=${numeroDoc}`,
+      `NossoNumero=${nossoNumero}`,
+      `NossoNumeroFormatado=${nossoNumero}`,
+      `BancoNumero=${process.env.CEDENTE_BANCO ?? ''}`,
       `Carteira=${process.env.CEDENTE_CARTEIRA ?? '1'}`,
+      `Modalidade=${process.env.CEDENTE_MODALIDADE ?? '1'}`,
+      `TipoCarteira=${process.env.CEDENTE_TIPO_CARTEIRA ?? '1'}`,
       `EspecieDoc=DM`,
       `TipoDocumento=DM`,
       `TipoInscricaoCedente=${tipoCedente}`,
@@ -51,7 +57,8 @@ export class ACBrParser {
       `DataDocumento=${dataHoje}`,
       `DataProcessamento=${dataHoje}`,
       `Vencimento=${dados.Vencimento}`,
-      `Valor=${dados.Valor.toFixed(2).replace('.', ',')}`,
+      `ValorDocumento=${valorFmt}`,
+      `Valor=${valorFmt}`,
       // -------------------------------------------------------
       // Cedente (empresa/banco) — lido dos .env
       // -------------------------------------------------------
@@ -63,6 +70,11 @@ export class ACBrParser {
       `Cedente.ContaDigito=${process.env.CEDENTE_CONTA_DIGITO ?? ''}`,
       `Cedente.Carteira=${process.env.CEDENTE_CARTEIRA ?? '1'}`,
       `Cedente.Banco=${process.env.CEDENTE_BANCO ?? ''}`,
+      `Cedente.Convenio=${process.env.CEDENTE_CONVENIO ?? ''}`,
+      `Cedente.CodigoCedente=${process.env.CEDENTE_CODIGO_CEDENTE ?? ''}`,
+      `Cedente.CodigoTransmissao=${process.env.CEDENTE_CODIGO_TRANSMISSAO ?? ''}`,
+      `Cedente.Modalidade=${process.env.CEDENTE_MODALIDADE ?? '1'}`,
+      `Cedente.TipoCarteira=${process.env.CEDENTE_TIPO_CARTEIRA ?? '1'}`,
       // -------------------------------------------------------
       // Sacado (cliente)
       // -------------------------------------------------------
