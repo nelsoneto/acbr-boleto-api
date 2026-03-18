@@ -1,18 +1,23 @@
-import koffi from 'koffi';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import { fileURLToPath } from 'url';
+
+import koffi from 'koffi';
+
+import { getAppConfig } from '../shared/config/appConfig.js';
+import { AcbrIntegrationError } from '../shared/errors/AppError.js';
+import { ensureDirectory } from '../shared/files/boletoFiles.js';
+import { createLogger } from '../shared/logging/appLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const logger = createLogger('acbr-lib');
 
 class ACBrBoleto {
-
   private static instance: ACBrBoleto;
 
   private lib: any;
   private handle: any = null;
-
   private Boleto_Inicializar: any;
   private Boleto_Finalizar: any;
   private Boleto_IncluirTitulos: any;
@@ -23,63 +28,41 @@ class ACBrBoleto {
   private outputFilePath: string;
 
   private constructor() {
-
+    const config = getAppConfig();
     const isWindows = process.platform === 'win32';
     const convention = isWindows ? '__stdcall' : '__cdecl';
-
-    const libName = isWindows
-      ? 'ACBrBoleto64.dll'
-      : 'libacbrboleto64.so';
-
+    const libName = isWindows ? 'ACBrBoleto64.dll' : 'libacbrboleto64.so';
     const libPath = path.resolve(__dirname, '../../bin', libName);
-    this.outputDir = path.resolve(__dirname, '../../temp/pdf');
-    this.outputFilePath = path.join(this.outputDir, 'boleto.pdf');
 
-    console.log('📦 Carregando ACBrLib:', libPath);
+    this.outputDir = config.runtime.tempPdfDir;
+    this.outputFilePath = path.join(this.outputDir, 'acbr-output.pdf');
 
-    this.lib = koffi.load(libPath);
+    logger.info('library.load.start', { libPath, platform: process.platform });
 
-    /**
-     * O handle da ACBrLib é um ponteiro opaco (TObject do Pascal).
-     * koffi.out(koffi.pointer('void *')) devolve um External opaco
-     * que é passado de volta intacto para todas as funções da DLL.
-     * int/int64 causam segfault porque a DLL dereferencia o handle como ponteiro.
-     */
+    try {
+      this.lib = koffi.load(libPath);
+    } catch (error) {
+      throw new AcbrIntegrationError('Falha ao carregar biblioteca ACBr', {
+        libPath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     this.Boleto_Inicializar = this.lib.func(
       convention,
       'Boleto_Inicializar',
       'int',
       [koffi.out(koffi.pointer('void *')), 'string', 'string']
     );
-
-    this.Boleto_Finalizar = this.lib.func(
-      convention,
-      'Boleto_Finalizar',
-      'int',
-      ['void *']
-    );
-
+    this.Boleto_Finalizar = this.lib.func(convention, 'Boleto_Finalizar', 'int', ['void *']);
     this.Boleto_IncluirTitulos = this.lib.func(
       convention,
       'Boleto_IncluirTitulos',
       'int',
       ['void *', 'string', 'void *', 'int']
     );
-
-    this.Boleto_GerarPDF = this.lib.func(
-      convention,
-      'Boleto_GerarPDF',
-      'int',
-      ['void *']
-    );
-
-    this.Boleto_LimparLista = this.lib.func(
-      convention,
-      'Boleto_LimparLista',
-      'int',
-      ['void *']
-    );
-
+    this.Boleto_GerarPDF = this.lib.func(convention, 'Boleto_GerarPDF', 'int', ['void *']);
+    this.Boleto_LimparLista = this.lib.func(convention, 'Boleto_LimparLista', 'int', ['void *']);
     this.Boleto_UltimoRetorno = this.lib.func(
       convention,
       'Boleto_UltimoRetorno',
@@ -90,9 +73,6 @@ class ACBrBoleto {
     this.inicializar();
   }
 
-  // ===============================
-  // SINGLETON
-  // ===============================
   static getInstance() {
     if (!this.instance) {
       this.instance = new ACBrBoleto();
@@ -100,198 +80,165 @@ class ACBrBoleto {
     return this.instance;
   }
 
-  // ===============================
-  // INIT
-  // ===============================
-  inicializar() {
+  private buildConfigIni() {
+    const config = getAppConfig();
+    const configDir = config.runtime.tempDir;
+    const { assets, boleto, cedente } = config;
 
-    // --------------------------------------------------
-    // Gera o INI de configuração da DLL a partir dos envs
-    // --------------------------------------------------
-    const configDir = path.resolve(__dirname, '../../temp');
-    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+    ensureDirectory(configDir);
+    ensureDirectory(this.outputDir);
 
-    const configPath = path.join(configDir, 'acbr-config.ini');
-    // Permite sobrescrever via .env e mantém fallback para o projeto local/container.
-    const logoDir = process.env.DIR_LOGO ?? path.resolve(__dirname, '../../assets/logos');
-    const bancoNumero = (process.env.CEDENTE_BANCO ?? '').replace(/\D/g, '').padStart(3, '0');
-    const logoEnv = (process.env.LOGO_BANCO ?? '').trim();
-    const layoutBoleto = process.env.BOLETO_LAYOUT ?? '1';
-    const escalaBoleto = process.env.BOLETO_ESCALA ?? '92';
-    const margemSuperior = process.env.BOLETO_MARGEM_SUPERIOR ?? '6';
-    const margemInferior = process.env.BOLETO_MARGEM_INFERIOR ?? '6';
-    const margemEsquerda = process.env.BOLETO_MARGEM_ESQUERDA ?? '5';
-    const margemDireita = process.env.BOLETO_MARGEM_DIREITA ?? '4';
-
+    const bancoNumero = cedente.banco.padStart(3, '0');
     let logoBancoPath = '';
-    if (logoEnv) {
-      logoBancoPath = path.isAbsolute(logoEnv)
-        ? logoEnv
-        : path.resolve(__dirname, '../../', logoEnv);
+
+    if (assets.logoBanco) {
+      logoBancoPath = path.isAbsolute(assets.logoBanco)
+        ? assets.logoBanco
+        : path.resolve(__dirname, '../../', assets.logoBanco);
     } else {
-      const logoBmp = path.join(logoDir, `${bancoNumero}.bmp`);
-      const logoPng = path.join(logoDir, `${bancoNumero}.png`);
+      const logoBmp = path.join(assets.logoDir, `${bancoNumero}.bmp`);
+      const logoPng = path.join(assets.logoDir, `${bancoNumero}.png`);
       if (fs.existsSync(logoBmp)) logoBancoPath = logoBmp;
       else if (fs.existsSync(logoPng)) logoBancoPath = logoPng;
     }
 
-    // Aliases para aumentar compatibilidade.
     if (logoBancoPath && fs.existsSync(logoBancoPath)) {
-      const aliasNames = [
-        `${bancoNumero}.bmp`,
-        `${bancoNumero}-0.bmp`,
-        `${bancoNumero}_0.bmp`,
-        'Banco.bmp',
-        'banco.bmp',
-      ];
+      const aliasNames = [`${bancoNumero}.bmp`, `${bancoNumero}-0.bmp`, `${bancoNumero}_0.bmp`, 'Banco.bmp', 'banco.bmp'];
       for (const aliasName of aliasNames) {
-        const aliasPath = path.join(logoDir, aliasName);
+        const aliasPath = path.join(assets.logoDir, aliasName);
         if (!fs.existsSync(aliasPath)) {
           fs.copyFileSync(logoBancoPath, aliasPath);
         }
       }
-      console.log('🏦 Logo banco selecionada:', logoBancoPath);
+      logger.info('library.logo.selected', { bancoNumero, logoBancoPath });
     } else {
-      console.log('⚠️ Logo do banco não encontrada para', bancoNumero, 'em', logoDir);
+      logger.warn('library.logo.missing', { bancoNumero, logoDir: assets.logoDir });
     }
 
-    if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
+    // TipoInscricao: 1=PJ (CNPJ 14 digitos), 0=PF (CPF 11 digitos)
+    const tipoInscricao = cedente.cnpjCpf.length === 14 ? 1 : 0;
+    const convenio = /^0+$/.test(cedente.convenio) ? '' : cedente.convenio;
+    const telefone = this.formatTelefone(cedente.telefone);
 
-    const formatTelefone = (raw?: string) => {
-      const digits = (raw ?? '').replace(/\D/g, '');
-      if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-      if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-      return raw?.trim() || '-';
-    };
-
-    const nomeCedenteBoleto = (process.env.CEDENTE_NOME_BOLETO ?? process.env.CEDENTE_NOME ?? '').trim();
-    const cedenteDoc = (process.env.CEDENTE_CNPJCPF ?? '').replace(/\D/g, '');
-    const tipoCedente = cedenteDoc.length === 14 ? 2 : 1;
-    const convenioRaw = (process.env.CEDENTE_CONVENIO ?? '').trim();
-    const convenio = /^0+$/.test(convenioRaw) ? '' : convenioRaw;
-    const cedenteLogradouro = (process.env.CEDENTE_LOGRADOURO ?? '-').trim() || '-';
-    const cedenteNumero = (process.env.CEDENTE_NUMERO ?? '-').trim() || '-';
-    const cedenteBairro = (process.env.CEDENTE_BAIRRO ?? '-').trim() || '-';
-    const cedenteCidade = (process.env.CEDENTE_CIDADE ?? '-').trim() || '-';
-    const cedenteUF = (process.env.CEDENTE_UF ?? '--').trim() || '--';
-    const cedenteCEP = (process.env.CEDENTE_CEP ?? '').replace(/\D/g, '') || '00000000';
-    const cedenteTelefone = formatTelefone(process.env.CEDENTE_TELEFONE);
-
-    const configIni = [
-      `[ACBrBoleto]`,
-      `TipoCobranca=${process.env.TIPO_COBRANCA ?? 'cobBancoTeste'}`,
-      ``,
+    // NOTA: O formato correto para Boleto_Inicializar e o formato interno da ACBrLib:
+    // [BoletoCedenteConfig], [BoletoBancoConfig], etc.
+    // O formato [Cedente]/[Conta]/[Banco] e usado apenas no INI de titulos (Boleto_IncluirTitulos).
+    return [
       `[BoletoCedenteConfig]`,
-      `Nome=${nomeCedenteBoleto}`,
-      `CNPJCPF=${cedenteDoc}`,
-      `TipoInscricao=${tipoCedente}`,
-      `Agencia=${process.env.CEDENTE_AGENCIA ?? ''}`,
-      `AgenciaDigito=${process.env.CEDENTE_AGENCIA_DIGITO ?? '0'}`,
-      `Conta=${process.env.CEDENTE_CONTA ?? ''}`,
-      `ContaDigito=${process.env.CEDENTE_CONTA_DIGITO ?? '0'}`,
-      `Carteira=${process.env.CEDENTE_CARTEIRA ?? '1'}`,
+      `Nome=${cedente.nomeBoleto}`,
+      `CNPJCPF=${cedente.cnpjCpf}`,
+      `TipoInscricao=${tipoInscricao}`,
+      `Agencia=${cedente.agencia}`,
+      `AgenciaDigito=${cedente.agenciaDigito}`,
+      `Conta=${cedente.conta}`,
+      `ContaDigito=${cedente.contaDigito}`,
+      `Carteira=${cedente.carteira}`,
       `Convenio=${convenio}`,
-      `CodigoCedente=${process.env.CEDENTE_CODIGO_CEDENTE ?? ''}`,
-      `CodigoTransmissao=${process.env.CEDENTE_CODIGO_TRANSMISSAO ?? ''}`,
-      `Modalidade=${process.env.CEDENTE_MODALIDADE ?? '1'}`,
-      `TipoCarteira=${process.env.CEDENTE_TIPO_CARTEIRA ?? '1'}`,
-      `TipoDocumento=${process.env.CEDENTE_TIPO_DOCUMENTO ?? 'DM'}`,
-      `ResponEmissao=${process.env.CEDENTE_RESPON_EMISSAO ?? '1'}`,
-      `Logradouro=${cedenteLogradouro}`,
-      `NumeroRes=${cedenteNumero}`,
-      `Bairro=${cedenteBairro}`,
-      `Cidade=${cedenteCidade}`,
-      `UF=${cedenteUF}`,
-      `CEP=${cedenteCEP}`,
-      `Telefone=${cedenteTelefone}`,
+      `CodigoCedente=${cedente.codigoCedente}`,
+      `CodigoTransmissao=${cedente.codigoTransmissao}`,
+      `Modalidade=${cedente.modalidade}`,
+      `TipoCarteira=${cedente.tipoCarteira}`,
+      `TipoDocumento=${cedente.tipoDocumento}`,
+      `ResponEmissao=${cedente.responEmissao}`,
+      `Logradouro=${cedente.logradouro}`,
+      `NumeroRes=${cedente.numero}`,
+      `Bairro=${cedente.bairro}`,
+      `Cidade=${cedente.cidade}`,
+      `UF=${cedente.uf}`,
+      `CEP=${cedente.cep}`,
+      `Telefone=${telefone}`,
+      `CaracTitulo=0`,
       ``,
       `[BoletoBancoConfig]`,
-      `Numero=${process.env.CEDENTE_BANCO ?? ''}`,
+      `Numero=${cedente.banco}`,
+      `TipoCobranca=${boleto.tipoCobranca}`,
       ``,
       `[BoletoDiretorioConfig]`,
       `DirArqRemessa=${configDir}`,
       `DirArqRetorno=${configDir}`,
       ``,
       `[BoletoBancoFCFortesConfig]`,
-      `DirLogo=${logoDir}`,
+      `DirLogo=${assets.logoDir}`,
       `LogoMarca=${logoBancoPath}`,
-      `Layout=${layoutBoleto}`,
+      `Layout=${boleto.layout}`,
       `AlterarEscalaPadrao=1`,
-      `NovaEscala=${escalaBoleto}`,
-      `MargemSuperior=${margemSuperior}`,
-      `MargemInferior=${margemInferior}`,
-      `MargemEsquerda=${margemEsquerda}`,
-      `MargemDireita=${margemDireita}`,
+      `NovaEscala=${boleto.escala}`,
+      `MargemSuperior=${boleto.margemSuperior}`,
+      `MargemInferior=${boleto.margemInferior}`,
+      `MargemEsquerda=${boleto.margemEsquerda}`,
+      `MargemDireita=${boleto.margemDireita}`,
       `CalcularNomeArquivoPDFIndividual=0`,
       `NomeArquivo=${this.outputFilePath}`,
     ].join('\r\n');
+  }
+
+  inicializar() {
+    const config = getAppConfig();
+    const configPath = path.join(config.runtime.tempDir, 'acbr-config.ini');
+    const configIni = this.buildConfigIni();
 
     fs.writeFileSync(configPath, configIni, 'utf8');
-    console.log('📄 Config INI gerado:', configPath);
+    logger.info('library.config.generated', { configPath });
 
-    // --------------------------------------------------
-    // Inicializa a DLL passando o caminho do config INI
-    // --------------------------------------------------
     const handleArr: [any] = [null];
+    const ret = this.Boleto_Inicializar(handleArr, configPath, '');
 
-    const ret = this.Boleto_Inicializar(
-      handleArr,
-      configPath,
-      ''
-    );
-
-    console.log('🔧 Boleto_Inicializar ret:', ret);
-
-    if (ret !== 0)
-      throw new Error(`Erro Inicializar ACBr: ret=${ret}`);
+    this.assertSuccess('Boleto_Inicializar', ret, handleArr[0]);
 
     this.handle = handleArr[0];
+    if (!this.handle) {
+      throw new AcbrIntegrationError('ACBr inicializou mas retornou handle nulo');
+    }
 
-    console.log('🔧 Handle recebido:', this.handle);
-
-    if (!this.handle)
-      throw new Error('ACBr inicializou (ret=0) mas o handle é nulo');
-
-    console.log('✅ ACBr inicializado com sucesso');
+    logger.info('library.initialized', { hasHandle: Boolean(this.handle) });
   }
 
   limparLista() {
     const ret = this.Boleto_LimparLista(this.handle);
-    console.log('🔧 limparLista ret:', ret);
-    return ret;
+    this.assertSuccess('Boleto_LimparLista', ret);
   }
 
-  incluirTitulos(iniContent: string) {
+  incluirTitulos(iniPath: string) {
     const retorno = Buffer.alloc(4096);
-    const ret = this.Boleto_IncluirTitulos(this.handle, iniContent, retorno, retorno.length);
-    console.log('🔧 incluirTitulos ret:', ret);
-    return ret;
+    logger.info('library.incluirTitulos.start', { iniPath });
+    const ret = this.Boleto_IncluirTitulos(this.handle, iniPath, retorno, retorno.length);
+    logger.info('library.incluirTitulos.done', { ret });
+    this.assertSuccess('Boleto_IncluirTitulos', ret);
   }
 
   gerarPDF() {
     const ret = this.Boleto_GerarPDF(this.handle);
-    console.log('🔧 gerarPDF ret:', ret);
-    return ret;
+    if (ret !== 0) {
+      // Nao chamar UltimoRetorno apos falha em GerarPDF: a lib entra em estado
+      // invalido e qualquer chamada subsequente causa Segmentation fault.
+      logger.info('library.operation.finished', { operation: 'Boleto_GerarPDF', ret });
+      throw new AcbrIntegrationError('Falha na operacao Boleto_GerarPDF', {
+        operation: 'Boleto_GerarPDF',
+        ret,
+        ultimoRetorno: '(indisponivel: lib em estado invalido apos falha no GerarPDF)',
+      });
+    }
+    this.assertSuccess('Boleto_GerarPDF', ret);
   }
 
   ultimoRetorno(): string {
+    if (!this.handle) {
+      return '';
+    }
 
-    const buffer = Buffer.alloc(2048);
-
-    this.Boleto_UltimoRetorno(
-      this.handle,
-      buffer,
-      buffer.length
-    );
-
-    return buffer.toString('utf8').replace(/\0/g, '');
+    const buffer = Buffer.alloc(4096);
+    this.Boleto_UltimoRetorno(this.handle, buffer, buffer.length);
+    return buffer.toString('utf8').replace(/\0/g, '').trim();
   }
 
   finalizar() {
-    if (this.handle) {
-      this.Boleto_Finalizar(this.handle);
-      this.handle = null;
+    if (!this.handle) {
+      return;
     }
+
+    this.Boleto_Finalizar(this.handle);
+    this.handle = null;
+    logger.info('library.finalized');
   }
 
   getConfiguredPdfPath() {
@@ -300,6 +247,41 @@ class ACBrBoleto {
 
   getOutputDir() {
     return this.outputDir;
+  }
+
+  private formatTelefone(raw?: string): string {
+    const digits = (raw ?? '').replace(/\D/g, '');
+    if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return raw?.trim() || '-';
+  }
+
+  private assertSuccess(operation: string, ret: number, handleOverride = this.handle) {
+    logger.info('library.operation.finished', { operation, ret });
+    if (ret === 0) {
+      return;
+    }
+
+    const ultimoRetorno = this.readLastReturn(handleOverride);
+    throw new AcbrIntegrationError(`Falha na operacao ${operation}`, {
+      operation,
+      ret,
+      ultimoRetorno,
+    });
+  }
+
+  private readLastReturn(handleOverride = this.handle) {
+    if (!handleOverride) {
+      return '';
+    }
+
+    try {
+      const buffer = Buffer.alloc(4096);
+      this.Boleto_UltimoRetorno(handleOverride, buffer, buffer.length);
+      return buffer.toString('utf8').replace(/\0/g, '').trim();
+    } catch {
+      return '';
+    }
   }
 }
 

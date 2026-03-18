@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { ACBrParser, BoletoSchema } from './ACBrParser.js';
+import { resetAppConfigForTests } from '../shared/config/appConfig.js';
+
+function setBaseEnv() {
+  process.env.NODE_ENV = 'test';
+  process.env.CEDENTE_NOME = 'Empresa Teste';
+  process.env.CEDENTE_NOME_BOLETO = 'Empresa Teste LTDA';
+  process.env.CEDENTE_CNPJCPF = '11222333000181';
+  process.env.CEDENTE_BANCO = '756';
+  process.env.CEDENTE_AGENCIA = '1234';
+  process.env.CEDENTE_AGENCIA_DIGITO = '1';
+  process.env.CEDENTE_CONTA = '99999';
+  process.env.CEDENTE_CONTA_DIGITO = '0';
+  process.env.CEDENTE_CARTEIRA = '1';
+  process.env.CEDENTE_CONVENIO = '123456';
+  process.env.CEDENTE_CODIGO_CEDENTE = '123456';
+  process.env.CEDENTE_CODIGO_TRANSMISSAO = '123456';
+  process.env.CEDENTE_MODALIDADE = '1';
+  process.env.CEDENTE_TIPO_CARTEIRA = '1';
+  process.env.CEDENTE_TIPO_DOCUMENTO = '0';
+  process.env.CEDENTE_ESPECIE_DOC = 'DM';
+  process.env.CEDENTE_RESPON_EMISSAO = '1';
+  process.env.NOSSO_NUMERO_TAMANHO = '7';
+  process.env.CEDENTE_LOGRADOURO = 'Rua do Cedente';
+  process.env.CEDENTE_NUMERO = '10';
+  process.env.CEDENTE_BAIRRO = 'Centro';
+  process.env.CEDENTE_CIDADE = 'Porto Velho';
+  process.env.CEDENTE_UF = 'RO';
+  process.env.CEDENTE_CEP = '76801000';
+  process.env.CEDENTE_TELEFONE = '69999999999';
+  delete process.env.TEMP_DIR;
+  delete process.env.TEMP_PDF_DIR;
+  resetAppConfigForTests();
+}
+
+test.beforeEach(() => {
+  setBaseEnv();
+});
+
+test('BoletoSchema rejeita documento e vencimento invalidos', () => {
+  const result = BoletoSchema.safeParse({
+    NumeroDocumento: '123',
+    Vencimento: '01/01/2020',
+    Valor: 10,
+    Sacado_Nome: 'Cliente Invalido',
+    Sacado_CNPJCPF: '11111111111',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '1',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'RO',
+    Sacado_CEP: '123',
+  });
+
+  assert.equal(result.success, false);
+  if (result.success) return;
+
+  const messages = result.error.issues.map(issue => issue.message);
+  assert.ok(messages.includes('Sacado_CNPJCPF deve conter um CPF ou CNPJ valido'));
+  assert.ok(messages.includes('Sacado_CEP deve conter 8 digitos'));
+  assert.ok(messages.includes('Vencimento deve ser hoje ou uma data futura valida'));
+});
+
+test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
+  const parsed = BoletoSchema.parse({
+    NumeroDocumento: '12345',
+    NossoNumero: '99',
+    Vencimento: '31/12/2099',
+    Valor: 150.25,
+    Sacado_Nome: 'Cliente Valido',
+    Sacado_CNPJCPF: '529.982.247-25',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '100',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'ro',
+    Sacado_CEP: '76801-000',
+    Mensagem: 'Mensagem teste',
+  });
+
+  const ini = ACBrParser.dadosParaIni(parsed, new Date('2026-01-02T00:00:00Z'));
+
+  assert.match(ini, /Cedente\.Nome=Empresa Teste LTDA/);
+  assert.match(ini, /Sacado\.CNPJCPF=52998224725/);
+  assert.match(ini, /Sacado\.UF=RO/);
+  assert.match(ini, /NossoNumero=0000099/);
+  assert.match(ini, /ValorDocumento=150,25/);
+  assert.match(ini, /Sacado\.Pessoa=0/);
+  assert.match(ini, /Especie=DM/);
+  assert.match(ini, /EspecieMod=R\$/);
+  assert.match(ini, /Aceite=1/);
+  assert.match(ini, /Parcela=1/);
+  assert.match(ini, /TotalParcelas=1/);
+  assert.match(ini, /Quantidade=/);
+  assert.match(ini, /Mensagem=Mensagem teste/);
+  assert.doesNotMatch(ini, /TipoInscricaoCedente=/);
+  assert.doesNotMatch(ini, /TipoInscricaoSacado=/);
+  assert.doesNotMatch(ini, /Cedente\.TipoInscricao=/);
+  assert.doesNotMatch(ini, /CodBanco=/);
+  assert.doesNotMatch(ini, /CodigoBanco=/);
+  assert.doesNotMatch(ini, /BancoNumero=/);
+  assert.doesNotMatch(ini, /Moeda=/);
+  assert.doesNotMatch(ini, /Valor=150,25/);
+});

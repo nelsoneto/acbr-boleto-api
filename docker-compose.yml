@@ -4,6 +4,8 @@ services:
   acbr-api:
     build: .
     container_name: meu-acbr
+    env_file:
+      - .env.prod
     ports:
       - "3001:3001"
     volumes:

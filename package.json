@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "dev": "NODE_ENV=development tsx watch --ignore '**/temp/**' --ignore '**/logs/**' src/server.ts",
     "start": "NODE_ENV=production tsx src/server.ts"
   },

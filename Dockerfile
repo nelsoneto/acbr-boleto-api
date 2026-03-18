@@ -21,13 +21,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package*.json ./
-# Instalando as dependências de produção e dev para garantir o tsx
-RUN npm install
+# Instala dependencias de forma reproduzivel e mais rapida em CI/build
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 
-# Garante que a pasta bin e a lib .so existam e tenham permissão
-RUN chmod -R 777 /app/bin /app/temp /app/logs
+# Garante que a pasta bin e os diretorios de runtime existam e tenham permissao
+RUN mkdir -p /app/temp/pdf /app/logs \
+    && chmod -R 777 /app/bin /app/temp /app/logs
 
 EXPOSE 3001
 
