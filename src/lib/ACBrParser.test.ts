@@ -31,6 +31,7 @@ function setBaseEnv() {
   process.env.CEDENTE_UF = 'RO';
   process.env.CEDENTE_CEP = '76801000';
   process.env.CEDENTE_TELEFONE = '69999999999';
+  delete process.env.BOLETO_VERSAO_ARQUIVO;
   delete process.env.TEMP_DIR;
   delete process.env.TEMP_PDF_DIR;
   resetAppConfigForTests();
@@ -83,7 +84,29 @@ test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
 
   const ini = ACBrParser.dadosParaIni(parsed, new Date('2026-01-02T00:00:00Z'));
 
-  assert.match(ini, /Cedente\.Nome=Empresa Teste LTDA/);
+  // Secoes obrigatorias no formato Modo 2 (Cedente_Titulos.INI)
+  assert.match(ini, /\[Cedente\]/);
+  assert.match(ini, /\[Conta\]/);
+  assert.match(ini, /\[Banco\]/);
+  assert.match(ini, /\[Titulo1\]/);
+
+  // Campos do [Cedente]
+  assert.match(ini, /Nome=Empresa Teste LTDA/);
+  assert.match(ini, /TipoPessoa=1/);
+  assert.match(ini, /CodigoCedente=123456/);
+  assert.match(ini, /RespEmis=1/);
+
+  // Campos do [Conta] com nomes corretos da documentacao
+  assert.match(ini, /Agencia=1234/);
+  assert.match(ini, /DigitoAgencia=1/);
+  assert.match(ini, /Conta=99999/);
+  assert.match(ini, /DigitoConta=0/);
+
+  // Campos do [Banco]
+  assert.match(ini, /Numero=756/);
+  assert.match(ini, /TipoCobranca=0/);
+
+  // Campos do [Titulo1]
   assert.match(ini, /Sacado\.CNPJCPF=52998224725/);
   assert.match(ini, /Sacado\.UF=RO/);
   assert.match(ini, /NossoNumero=0000099/);
@@ -96,6 +119,14 @@ test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
   assert.match(ini, /TotalParcelas=1/);
   assert.match(ini, /Quantidade=/);
   assert.match(ini, /Mensagem=Mensagem teste/);
+
+  // Campos que nao devem aparecer no novo formato
+  assert.doesNotMatch(ini, /Cedente\.Agencia=/);
+  assert.doesNotMatch(ini, /Cedente\.AgenciaDigito=/);
+  assert.doesNotMatch(ini, /Cedente\.Conta=/);
+  assert.doesNotMatch(ini, /Cedente\.ContaDigito=/);
+  assert.doesNotMatch(ini, /Cedente\.Banco=/);
+  assert.doesNotMatch(ini, /Cedente\.CodigoTransmissao=/);
   assert.doesNotMatch(ini, /TipoInscricaoCedente=/);
   assert.doesNotMatch(ini, /TipoInscricaoSacado=/);
   assert.doesNotMatch(ini, /Cedente\.TipoInscricao=/);
@@ -104,4 +135,45 @@ test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
   assert.doesNotMatch(ini, /BancoNumero=/);
   assert.doesNotMatch(ini, /Moeda=/);
   assert.doesNotMatch(ini, /Valor=150,25/);
+});
+
+test('dadosParaIni omite VersaoArquivo quando nao configurado', () => {
+  const parsed = BoletoSchema.parse({
+    NumeroDocumento: '1',
+    Vencimento: '31/12/2099',
+    Valor: 10,
+    Sacado_Nome: 'Cliente Valido',
+    Sacado_CNPJCPF: '529.982.247-25',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '1',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'RO',
+    Sacado_CEP: '76801000',
+  });
+
+  const ini = ACBrParser.dadosParaIni(parsed);
+  assert.doesNotMatch(ini, /VersaoArquivo=/);
+});
+
+test('dadosParaIni inclui VersaoArquivo quando configurado', () => {
+  process.env.BOLETO_VERSAO_ARQUIVO = '810';
+  resetAppConfigForTests();
+
+  const parsed = BoletoSchema.parse({
+    NumeroDocumento: '1',
+    Vencimento: '31/12/2099',
+    Valor: 10,
+    Sacado_Nome: 'Cliente Valido',
+    Sacado_CNPJCPF: '529.982.247-25',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '1',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'RO',
+    Sacado_CEP: '76801000',
+  });
+
+  const ini = ACBrParser.dadosParaIni(parsed);
+  assert.match(ini, /VersaoArquivo=810/);
 });

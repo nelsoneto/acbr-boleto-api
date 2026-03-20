@@ -26,6 +26,8 @@ const envSchema = z
     BOLETO_MARGEM_INFERIOR: z.string().trim().default('6'),
     BOLETO_MARGEM_ESQUERDA: z.string().trim().default('5'),
     BOLETO_MARGEM_DIREITA: z.string().trim().default('4'),
+    // VersaoArquivo para [Banco] no INI de titulos. Sicoob usa 810 para nao calcular DV do NossoNumero.
+    BOLETO_VERSAO_ARQUIVO: z.string().trim().default(''),
     CEDENTE_NOME: z.string().trim().optional(),
     CEDENTE_NOME_BOLETO: z.string().trim().optional(),
     CEDENTE_CNPJCPF: z.string().trim().optional(),
@@ -118,6 +120,7 @@ function buildConfig(env: z.infer<typeof envSchema>) {
       margemInferior: env.BOLETO_MARGEM_INFERIOR,
       margemEsquerda: env.BOLETO_MARGEM_ESQUERDA,
       margemDireita: env.BOLETO_MARGEM_DIREITA,
+      versaoArquivo: env.BOLETO_VERSAO_ARQUIVO,
     },
     assets: {
       logoDir,

@@ -34,3 +34,9 @@ temp/
 # Local documentation
 README.local.md
 agents.md
+
+# Generated PDFs at root (test artifacts)
+boleto_*.pdf
+
+# OpenCode session file
+opencode.json

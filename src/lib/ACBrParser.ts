@@ -61,35 +61,6 @@ export const BoletoSchema = z
 export type BoletoData = z.infer<typeof BoletoSchema>;
 
 export class ACBrParser {
-  private static mapTipoDocumento(value: string): string {
-    const map: Record<string, string> = {
-      CH: '1',
-      DM: '2',
-      DMI: '3',
-      DS: '4',
-      DSI: '5',
-      DR: '6',
-      LC: '7',
-      NCC: '8',
-      NCE: '9',
-      NCI: '10',
-      NCR: '11',
-      NP: '12',
-      NPR: '13',
-      TM: '14',
-      TS: '15',
-      NS: '16',
-      RC: '17',
-      FAT: '18',
-      ND: '19',
-      AP: '20',
-      ME: '21',
-      PC: '22',
-    };
-
-    return map[value.toUpperCase()] ?? value;
-  }
-
   private static formatTelefone(raw?: string): string {
     const digits = digitsOnly(raw ?? '');
     if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
@@ -99,26 +70,54 @@ export class ACBrParser {
 
   static dadosParaIni(dados: BoletoData, referenceDate = new Date()): string {
     const config = getAppConfig();
-    const { cedente } = config;
+    const { cedente, boleto } = config;
     const dataHoje = referenceDate.toLocaleDateString('pt-BR');
     const tipoSacado = dados.Sacado_CNPJCPF.length === 14 ? 1 : 0;
+    const tipoPessoa = cedente.cnpjCpf.length === 14 ? 1 : 0;
     const valorFmt = dados.Valor.toFixed(2).replace('.', ',');
     const numeroDoc = digitsOnly(dados.NumeroDocumento);
     const nossoNumero = digitsOnly(dados.NossoNumero ?? numeroDoc).padStart(cedente.nossoNumeroTamanho, '0');
     const convenio = /^0+$/.test(cedente.convenio) ? '' : cedente.convenio;
     const cedenteTelefone = this.formatTelefone(cedente.telefone);
-    const tipoDocumento = ACBrParser.mapTipoDocumento(cedente.especieDoc);
     const mensagem = dados.Mensagem?.trim() ?? '';
 
+    // Formato Modo 2 (Cedente_Titulos.INI): secoes [Cedente], [Conta], [Banco] seguidas de [Titulo1].
+    // Os nomes de campo seguem exatamente o modelo oficial da documentacao ACBrLib.
     const linhas = [
+      `[Cedente]`,
+      `Nome=${cedente.nomeBoleto}`,
+      `CNPJCPF=${cedente.cnpjCpf}`,
+      `TipoPessoa=${tipoPessoa}`,
+      `CodigoCedente=${cedente.codigoCedente}`,
+      `Modalidade=${cedente.modalidade}`,
+      `TipoCarteira=${cedente.tipoCarteira}`,
+      `TipoDocumento=${cedente.tipoDocumento}`,
+      `RespEmis=${cedente.responEmissao}`,
+      `Convenio=${convenio}`,
+      `Logradouro=${cedente.logradouro}`,
+      `Numero=${cedente.numero}`,
+      `Bairro=${cedente.bairro}`,
+      `Cidade=${cedente.cidade}`,
+      `UF=${cedente.uf}`,
+      `CEP=${cedente.cep}`,
+      `Telefone=${cedenteTelefone}`,
+      ``,
+      `[Conta]`,
+      `Agencia=${cedente.agencia}`,
+      `DigitoAgencia=${cedente.agenciaDigito}`,
+      `Conta=${cedente.conta}`,
+      `DigitoConta=${cedente.contaDigito}`,
+      ``,
+      `[Banco]`,
+      `Numero=${cedente.banco}`,
+      `TipoCobranca=${boleto.tipoCobranca}`,
+      ...(boleto.versaoArquivo ? [`VersaoArquivo=${boleto.versaoArquivo}`] : []),
+      ``,
       `[Titulo1]`,
       `NumeroDocumento=${numeroDoc}`,
       `NossoNumero=${nossoNumero}`,
       `Carteira=${cedente.carteira}`,
-      `Modalidade=${cedente.modalidade}`,
-      `TipoCarteira=${cedente.tipoCarteira}`,
       `EspecieDoc=${cedente.especieDoc}`,
-      `TipoDocumento=${tipoDocumento}`,
       `DataDocumento=${dataHoje}`,
       `DataProcessamento=${dataHoje}`,
       `Vencimento=${dados.Vencimento}`,
@@ -135,26 +134,6 @@ export class ACBrParser {
       `Aceite=1`,
       `Parcela=1`,
       `TotalParcelas=1`,
-      `Cedente.Nome=${cedente.nomeBoleto}`,
-      `Cedente.CNPJCPF=${cedente.cnpjCpf}`,
-      `Cedente.Agencia=${cedente.agencia}`,
-      `Cedente.AgenciaDigito=${cedente.agenciaDigito}`,
-      `Cedente.Conta=${cedente.conta}`,
-      `Cedente.ContaDigito=${cedente.contaDigito}`,
-      `Cedente.Carteira=${cedente.carteira}`,
-      `Cedente.Banco=${cedente.banco}`,
-      `Cedente.Convenio=${convenio}`,
-      `Cedente.CodigoCedente=${cedente.codigoCedente}`,
-      `Cedente.CodigoTransmissao=${cedente.codigoTransmissao}`,
-      `Cedente.Modalidade=${cedente.modalidade}`,
-      `Cedente.TipoCarteira=${cedente.tipoCarteira}`,
-      `Cedente.Logradouro=${cedente.logradouro}`,
-      `Cedente.Numero=${cedente.numero}`,
-      `Cedente.Bairro=${cedente.bairro}`,
-      `Cedente.Cidade=${cedente.cidade}`,
-      `Cedente.UF=${cedente.uf}`,
-      `Cedente.CEP=${cedente.cep}`,
-      `Cedente.Telefone=${cedenteTelefone}`,
       `Sacado.NomeSacado=${dados.Sacado_Nome}`,
       `Sacado.CNPJCPF=${dados.Sacado_CNPJCPF}`,
       `Sacado.Pessoa=${tipoSacado}`,

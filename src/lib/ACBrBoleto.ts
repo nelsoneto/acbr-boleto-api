@@ -152,6 +152,7 @@ class ACBrBoleto {
       `[BoletoBancoConfig]`,
       `Numero=${cedente.banco}`,
       `TipoCobranca=${boleto.tipoCobranca}`,
+      ...(boleto.versaoArquivo ? [`LayoutVersaoArquivo=${boleto.versaoArquivo}`] : []),
       ``,
       `[BoletoDiretorioConfig]`,
       `DirArqRemessa=${configDir}`,
