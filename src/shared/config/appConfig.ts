@@ -28,6 +28,12 @@ const envSchema = z
     BOLETO_MARGEM_DIREITA: z.string().trim().default('4'),
     // VersaoArquivo para [Banco] no INI de titulos. Sicoob usa 810 para nao calcular DV do NossoNumero.
     BOLETO_VERSAO_ARQUIVO: z.string().trim().default(''),
+    // CNAB para [Banco] no INI de titulos. 1=CNAB240, 2=CNAB400.
+    BOLETO_CNAB: z.string().trim().default('1'),
+    // NumeroCorrespondente para [Banco]. 0 = sem banco correspondente.
+    BOLETO_NUMERO_CORRESPONDENTE: z.string().trim().default('0'),
+    // VersaoLote para [Banco] no INI de titulos.
+    BOLETO_VERSAO_LOTE: z.string().trim().default('0'),
     CEDENTE_NOME: z.string().trim().optional(),
     CEDENTE_NOME_BOLETO: z.string().trim().optional(),
     CEDENTE_CNPJCPF: z.string().trim().optional(),
@@ -47,7 +53,7 @@ const envSchema = z
     // EspecieDoc do Titulo INI: DM, DS, NP, etc.
     CEDENTE_ESPECIE_DOC: z.string().trim().optional(),
     CEDENTE_RESPON_EMISSAO: z.string().trim().optional(),
-    // Tamanho do NossoNumero com zero-padding. Bancoob/756 usa 7.
+    // Tamanho do NossoNumero com zero-padding. Sicoob/756 Carteira 1 (produto 101) com VersaoArquivo=810 usa 8 digitos (sem DV).
     NOSSO_NUMERO_TAMANHO: z.coerce.number().int().min(1).max(20).default(7),
     CEDENTE_LOGRADOURO: z.string().trim().optional(),
     CEDENTE_NUMERO: z.string().trim().optional(),
@@ -121,6 +127,9 @@ function buildConfig(env: z.infer<typeof envSchema>) {
       margemEsquerda: env.BOLETO_MARGEM_ESQUERDA,
       margemDireita: env.BOLETO_MARGEM_DIREITA,
       versaoArquivo: env.BOLETO_VERSAO_ARQUIVO,
+      cnab: env.BOLETO_CNAB,
+      numeroCorrespondente: env.BOLETO_NUMERO_CORRESPONDENTE,
+      versaoLote: env.BOLETO_VERSAO_LOTE,
     },
     assets: {
       logoDir,

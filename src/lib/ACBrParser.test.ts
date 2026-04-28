@@ -23,7 +23,7 @@ function setBaseEnv() {
   process.env.CEDENTE_TIPO_DOCUMENTO = '0';
   process.env.CEDENTE_ESPECIE_DOC = 'DM';
   process.env.CEDENTE_RESPON_EMISSAO = '1';
-  process.env.NOSSO_NUMERO_TAMANHO = '7';
+  process.env.NOSSO_NUMERO_TAMANHO = '8';
   process.env.CEDENTE_LOGRADOURO = 'Rua do Cedente';
   process.env.CEDENTE_NUMERO = '10';
   process.env.CEDENTE_BAIRRO = 'Centro';
@@ -32,6 +32,9 @@ function setBaseEnv() {
   process.env.CEDENTE_CEP = '76801000';
   process.env.CEDENTE_TELEFONE = '69999999999';
   delete process.env.BOLETO_VERSAO_ARQUIVO;
+  delete process.env.BOLETO_CNAB;
+  delete process.env.BOLETO_NUMERO_CORRESPONDENTE;
+  delete process.env.BOLETO_VERSAO_LOTE;
   delete process.env.TEMP_DIR;
   delete process.env.TEMP_PDF_DIR;
   resetAppConfigForTests();
@@ -104,12 +107,15 @@ test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
 
   // Campos do [Banco]
   assert.match(ini, /Numero=756/);
+  assert.match(ini, /CNAB=1/);
   assert.match(ini, /TipoCobranca=0/);
+  assert.match(ini, /NumeroCorrespondente=0/);
+  assert.match(ini, /VersaoLote=0/);
 
   // Campos do [Titulo1]
   assert.match(ini, /Sacado\.CNPJCPF=52998224725/);
   assert.match(ini, /Sacado\.UF=RO/);
-  assert.match(ini, /NossoNumero=0000099/);
+  assert.match(ini, /NossoNumero=00000099/);
   assert.match(ini, /ValorDocumento=150,25/);
   assert.match(ini, /Sacado\.Pessoa=0/);
   assert.match(ini, /Especie=DM/);
