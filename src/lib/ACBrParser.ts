@@ -25,6 +25,9 @@ export const BoletoSchema = z
     Mensagem: z.string().trim().max(200).optional(),
   })
   .superRefine((value, ctx) => {
+    const config = getAppConfig();
+    const effectiveNossoNumero = digitsOnly(value.NossoNumero ?? value.NumeroDocumento);
+
     if (!isValidCpfOrCnpj(value.Sacado_CNPJCPF)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -54,6 +57,14 @@ export const BoletoSchema = z
         code: z.ZodIssueCode.custom,
         path: ['Vencimento'],
         message: 'Vencimento deve ser hoje ou uma data futura valida',
+      });
+    }
+
+    if (effectiveNossoNumero.length > config.cedente.nossoNumeroTamanho) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [value.NossoNumero ? 'NossoNumero' : 'NumeroDocumento'],
+        message: `NossoNumero efetivo deve conter no maximo ${config.cedente.nossoNumeroTamanho} digitos para a configuracao atual`,
       });
     }
   });

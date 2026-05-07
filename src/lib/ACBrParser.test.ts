@@ -68,6 +68,59 @@ test('BoletoSchema rejeita documento e vencimento invalidos', () => {
   assert.ok(messages.includes('Vencimento deve ser hoje ou uma data futura valida'));
 });
 
+test('BoletoSchema rejeita NossoNumero acima do tamanho configurado', () => {
+  const result = BoletoSchema.safeParse({
+    NumeroDocumento: '123',
+    NossoNumero: '0002026004',
+    Vencimento: '31/12/2099',
+    Valor: 10,
+    Sacado_Nome: 'Cliente Valido',
+    Sacado_CNPJCPF: '529.982.247-25',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '1',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'RO',
+    Sacado_CEP: '76801000',
+  });
+
+  assert.equal(result.success, false);
+  if (result.success) return;
+
+  assert.ok(
+    result.error.issues.some(issue =>
+      issue.path.join('.') === 'NossoNumero'
+      && issue.message === 'NossoNumero efetivo deve conter no maximo 8 digitos para a configuracao atual'
+    )
+  );
+});
+
+test('BoletoSchema rejeita NumeroDocumento acima do tamanho configurado quando vira NossoNumero', () => {
+  const result = BoletoSchema.safeParse({
+    NumeroDocumento: '0002026004',
+    Vencimento: '31/12/2099',
+    Valor: 10,
+    Sacado_Nome: 'Cliente Valido',
+    Sacado_CNPJCPF: '529.982.247-25',
+    Sacado_Logradouro: 'Rua A',
+    Sacado_Numero: '1',
+    Sacado_Bairro: 'Centro',
+    Sacado_Cidade: 'Porto Velho',
+    Sacado_UF: 'RO',
+    Sacado_CEP: '76801000',
+  });
+
+  assert.equal(result.success, false);
+  if (result.success) return;
+
+  assert.ok(
+    result.error.issues.some(issue =>
+      issue.path.join('.') === 'NumeroDocumento'
+      && issue.message === 'NossoNumero efetivo deve conter no maximo 8 digitos para a configuracao atual'
+    )
+  );
+});
+
 test('dadosParaIni usa configuracao do cedente e normaliza dados', () => {
   const parsed = BoletoSchema.parse({
     NumeroDocumento: '12345',

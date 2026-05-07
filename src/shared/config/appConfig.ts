@@ -20,12 +20,14 @@ const envSchema = z
     // Valor numerico do enum TipoCobranca da ACBrLib.
     // Ex.: 9 = Bancoob, 1 = Banco do Brasil, 5 = Bradesco, 6 = Itau.
     TIPO_COBRANCA: z.coerce.number().int().min(0).default(0),
-    BOLETO_LAYOUT: z.string().trim().default('1'),
-    BOLETO_ESCALA: z.string().trim().default('92'),
-    BOLETO_MARGEM_SUPERIOR: z.string().trim().default('6'),
-    BOLETO_MARGEM_INFERIOR: z.string().trim().default('6'),
-    BOLETO_MARGEM_ESQUERDA: z.string().trim().default('5'),
-    BOLETO_MARGEM_DIREITA: z.string().trim().default('4'),
+    // Enum TACBrBolLayOut: 0=lPadrao, 1=lCarne, 2=lFatura, ...
+    BOLETO_LAYOUT: z.string().trim().default('0'),
+    // Defaults do layout Fortes no ACBrMonitor/ACBrLib para boleto A4.
+    BOLETO_ESCALA: z.string().trim().default('96'),
+    BOLETO_MARGEM_SUPERIOR: z.string().trim().default('5'),
+    BOLETO_MARGEM_INFERIOR: z.string().trim().default('5'),
+    BOLETO_MARGEM_ESQUERDA: z.string().trim().default('4'),
+    BOLETO_MARGEM_DIREITA: z.string().trim().default('3'),
     // VersaoArquivo para [Banco] no INI de titulos. Sicoob usa 810 para nao calcular DV do NossoNumero.
     BOLETO_VERSAO_ARQUIVO: z.string().trim().default(''),
     // CNAB para [Banco] no INI de titulos. 1=CNAB240, 2=CNAB400.

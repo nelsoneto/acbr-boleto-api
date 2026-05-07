@@ -1,0 +1,23 @@
+FROM acbr-boleto-api-acbr-api:latest
+
+RUN apt-get update && apt-get install -y \
+    fontconfig \
+    fonts-dejavu-core \
+    fonts-dejavu-extra \
+    fonts-liberation \
+    fonts-liberation2 \
+    fonts-freefont-ttf \
+    fonts-urw-base35 \
+    gsfonts \
+    libfreetype6 \
+    libxext6 \
+    libx11-6 \
+    libxtst6 \
+    libxi6 \
+    libglu1-mesa \
+    libnss3 \
+    libasound2 \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN fc-cache -fv
